@@ -9,6 +9,7 @@ When a voicemail is recorded, the handler parses caller info and publishes a JSO
 **Topic:** `freepbx/voicemail/{mailbox}` (e.g. `freepbx/voicemail/100`)
 
 **Payload:**
+
 ```json
 {
     "context": "default",
@@ -55,19 +56,19 @@ The installer aborts with an error if Asterisk is not installed or `/etc/asteris
 
 Before touching any file, the installer shows a full summary of every planned change. Each file is marked with a status:
 
-| Status       | Meaning |
-|--------------|---------|
-| `[NEW]`      | File does not exist yet — will be created. Shows a unified diff against `/dev/null`. |
-| `[UPDATE]`   | File exists but differs — shows a unified diff of old vs. new. |
-| `[SKIP]`     | File already exists and is identical — nothing to do. |
-| `[KEEP]`     | Config file exists with custom settings — will **not** be overwritten. A `.new` copy is saved for reference. |
+| Status | Meaning |
+| --- | --- |
+| `[NEW]` | File does not exist yet — will be created. Shows a unified diff against `/dev/null`. |
+| `[UPDATE]` | File exists but differs — shows a unified diff of old vs. new. |
+| `[SKIP]` | File already exists and is identical — nothing to do. |
+| `[KEEP]` | Config file exists with custom settings — will **not** be overwritten. A `.new` copy is saved for reference. |
 | `[CONFLICT]` | `externnotify` is already set to a different script — will **not** be changed automatically. |
-| `[INSTALL]`  | A system package needs to be installed (`mosquitto-clients`). |
+| `[INSTALL]` | A system package needs to be installed (`mosquitto-clients`). |
 
 Files checked:
 
 | File | Description |
-|------|-------------|
+| --- | --- |
 | `/usr/local/bin/voicemail-handler.sh` | The handler script called by Asterisk |
 | `/etc/asterisk/voicemail-handler.conf` | MQTT broker configuration |
 | `/etc/asterisk/voicemail_custom.conf` | Asterisk voicemail config (`externnotify` directive) |
@@ -76,7 +77,7 @@ If there are no changes needed, the installer exits with "Nothing to do".
 
 #### Phase 3 — Confirm
 
-```
+```text
 Apply these changes? [y/N]
 ```
 
@@ -87,12 +88,27 @@ Nothing is written until you answer `y`. Any other input aborts.
 Only after confirmation, the installer:
 
 1. **Installs `mosquitto-clients`** via `apt-get` (if not already present)
-2. **Copies the handler script** to `/usr/local/bin/voicemail-handler.sh` (mode `755`, owner `root:root`)
-3. **Copies the config** to `/etc/asterisk/voicemail-handler.conf` (mode `640`, owner `root:asterisk`) — or saves a `.new` reference copy if the config already exists
-4. **Configures `externnotify`** in `/etc/asterisk/voicemail_custom.conf`:
+2. **Backs up existing files** to `/etc/asterisk/voicemail-handler-backup/` before overwriting
+3. **Copies the handler script** to `/usr/local/bin/voicemail-handler.sh` (mode `755`, owner `root:root`)
+4. **Copies the config** to `/etc/asterisk/voicemail-handler.conf` (mode `640`, owner `root:asterisk`) — or saves a `.new` reference copy if the config already exists
+5. **Configures `externnotify`** in `/etc/asterisk/voicemail_custom.conf`:
    - Creates the file with a `[general]` section if it doesn't exist
    - Adds the directive to an existing `[general]` section
    - Warns (without changing) if `externnotify` is already set to something else
+
+### Undo / Restore
+
+The installer backs up all files it overwrites to `/etc/asterisk/voicemail-handler-backup/`. To restore the previous state:
+
+```bash
+sudo bash install.sh --restore
+```
+
+This shows a diff of what will be restored and asks for confirmation before applying. After restoring, reload Asterisk:
+
+```bash
+asterisk -rx 'voicemail reload'
+```
 
 ### After installation
 
@@ -123,11 +139,13 @@ MQTT_PASS=""
 ## Testing
 
 Subscribe to the topic and leave a test voicemail:
+
 ```bash
 mosquitto_sub -h mqtt.mrz.ip -t 'freepbx/voicemail/#'
 ```
 
 Check logs:
+
 ```bash
 journalctl -t voicemail-handler
 ```
