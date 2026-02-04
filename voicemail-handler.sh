@@ -5,14 +5,24 @@
 
 set -euo pipefail
 
-CONFIG_FILE="/etc/asterisk/voicemail-handler.conf"
+MQTT_CONF="/etc/asterisk/mqtt.conf"
+HANDLER_CONF="/etc/asterisk/voicemail-handler.conf"
 
-# Load config
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    logger -t voicemail-handler "ERROR: Config not found: $CONFIG_FILE"
+# Load MQTT connection config
+if [[ ! -f "$MQTT_CONF" ]]; then
+    logger -t voicemail-handler "ERROR: Config not found: $MQTT_CONF"
     exit 1
 fi
-source "$CONFIG_FILE"
+# shellcheck source=/etc/asterisk/mqtt.conf
+source "$MQTT_CONF"
+
+# Load handler config
+if [[ ! -f "$HANDLER_CONF" ]]; then
+    logger -t voicemail-handler "ERROR: Config not found: $HANDLER_CONF"
+    exit 1
+fi
+# shellcheck source=/etc/asterisk/voicemail-handler.conf
+source "$HANDLER_CONF"
 
 CONTEXT="${1:-}"
 MAILBOX="${2:-}"
@@ -41,9 +51,37 @@ fi
 
 logger -t voicemail-handler "New voicemail: mailbox=${MAILBOX} caller=${CALLERID} duration=${DURATION}s"
 
-# Build JSON payload
-PAYLOAD=$(cat <<EOF
+# ── MQTT publish helper ──────────────────────────────────────────
+
+mqtt_publish() {
+    local topic="$1"
+    local payload="$2"
+    local retain="${3:-}"
+
+    local cmd=(mosquitto_pub -h "$MQTT_HOST" -p "${MQTT_PORT:-1883}" -t "$topic" -m "$payload")
+
+    if [[ -n "${MQTT_USER:-}" ]]; then
+        cmd+=(-u "$MQTT_USER")
+        [[ -n "${MQTT_PASS:-}" ]] && cmd+=(-P "$MQTT_PASS")
+    fi
+
+    [[ "$retain" == "-r" ]] && cmd+=(-r)
+
+    if "${cmd[@]}" 2>/dev/null; then
+        logger -t voicemail-handler "MQTT published to ${topic}"
+    else
+        logger -t voicemail-handler "ERROR: MQTT publish failed for ${topic}"
+    fi
+}
+
+TOPIC_BASE="${MQTT_TOPIC:-freepbx/voicemail}/${MAILBOX}"
+
+# ── Event: New voicemail (full details) ──────────────────────────
+
+if [[ "${EVENT_NEW_VM:-true}" == "true" ]]; then
+    PAYLOAD=$(cat <<EOF
 {
+    "event": "new_voicemail",
     "context": "${CONTEXT}",
     "mailbox": "${MAILBOX}",
     "new_count": ${NEW_COUNT},
@@ -54,26 +92,17 @@ PAYLOAD=$(cat <<EOF
 }
 EOF
 )
-
-# Build mosquitto_pub command
-MQTT_CMD=(mosquitto_pub
-    -h "$MQTT_HOST"
-    -p "${MQTT_PORT:-1883}"
-    -t "${MQTT_TOPIC:-freepbx/voicemail}/${MAILBOX}"
-    -m "$PAYLOAD"
-)
-
-# Add auth if configured
-if [[ -n "${MQTT_USER:-}" ]]; then
-    MQTT_CMD+=(-u "$MQTT_USER")
-    if [[ -n "${MQTT_PASS:-}" ]]; then
-        MQTT_CMD+=(-P "$MQTT_PASS")
-    fi
+    mqtt_publish "$TOPIC_BASE" "$PAYLOAD"
 fi
 
-# Publish
-if "${MQTT_CMD[@]}" 2>/dev/null; then
-    logger -t voicemail-handler "MQTT published to ${MQTT_TOPIC:-freepbx/voicemail}/${MAILBOX}"
-else
-    logger -t voicemail-handler "ERROR: MQTT publish failed"
+# ── Event: Message count (retained) ─────────────────────────────
+
+if [[ "${EVENT_COUNT:-true}" == "true" ]]; then
+    mqtt_publish "${TOPIC_BASE}/count" "$NEW_COUNT" "-r"
+fi
+
+# ── Event: Caller ID ────────────────────────────────────────────
+
+if [[ "${EVENT_CALLERID:-true}" == "true" ]]; then
+    mqtt_publish "${TOPIC_BASE}/callerid" "$CALLERID"
 fi

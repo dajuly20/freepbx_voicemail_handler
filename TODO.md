@@ -1,49 +1,36 @@
-# FreePBX Voicemail MQTT Handler
 
-Publishes new voicemail events from FreePBX/Asterisk to an MQTT broker via `externnotify`.
+[ ] Update README.md
 
-When a voicemail is recorded, the handler parses caller info and publishes configurable MQTT messages — ready for Home Assistant, Node-RED, or any other MQTT consumer.
+    Run shellcheck on scripts
+    Read README.md
+    Write README.md
+    182 lines
 
-## MQTT Events
+    **Topic:** `{MQTT_TOPIC}/{mailbox}` (e.g. `freepbx/voicemail/100`)
+    Full details as JSON:
 
-The handler supports three independently configurable events. Each publishes to its own MQTT sub-topic.
 
-### 1. New Voicemail (`EVENT_NEW_VM`)
+    ```json
+    {
+        "event": "new_voicemail",
+        "context": "default",
+        "mailbox": "100",
+        "new_count": 1,
+        "callerid": "\"Max Mustermann\" <0171234567>",
+        "duration": "12",
+        "date": "Tue Feb 04 06:30:00 PM CET 2026",
+        "file": "/var/spool/asterisk/voicemail/default/100/INBOX/msg0001.wav"
+    }
+    ```
 
-**Topic:** `{MQTT_TOPIC}/{mailbox}` (e.g. `freepbx/voicemail/100`)
-
-Full details as JSON:
-
-```json
-{
-    "event": "new_voicemail",
-    "context": "default",
-    "mailbox": "100",
-    "new_count": 1,
-    "callerid": "\"Max Mustermann\" <0171234567>",
-    "duration": "12",
-    "date": "Tue Feb 04 06:30:00 PM CET 2026",
-    "file": "/var/spool/asterisk/voicemail/default/100/INBOX/msg0001.wav"
-}
-```
-
-### 2. Message Count (`EVENT_COUNT`)
 
 **Topic:** `{MQTT_TOPIC}/{mailbox}/count` (e.g. `freepbx/voicemail/100/count`)
-
 Plain number, published as **retained** message — ideal for Home Assistant sensors.
-
-```
-1
-```
-
 ### 3. Caller ID (`EVENT_CALLERID`)
-
 **Topic:** `{MQTT_TOPIC}/{mailbox}/callerid` (e.g. `freepbx/voicemail/100/callerid`)
-
 Caller identification string, useful for notification displays.
 
-```
+´´'
 "Max Mustermann" <0171234567>
 ```
 
@@ -179,3 +166,13 @@ journalctl -t voicemail-handler -f
 ## How It Works
 
 Asterisk calls the handler via `externnotify` each time a new voicemail is recorded. The script receives the context, mailbox number, and message count as arguments, reads caller metadata from the voicemail `.txt` file, and publishes to MQTT based on the enabled events.
+You've hit your limit · resets 1pm (Europe/Berlin)
+
+MQTT Message
+Topic: freepbx/voicemail/{mailbox} (e.g. freepbx/voicemail/100)
+
+Payload:
+ 
+
+Bitte füge hier obendrüber noch ein, wo der Einstiegspunkt ist, und mit welchen parametern was dann welche datei aufruft usw.
+You've hit your limit · resets 1pm (Europe/Berlin)
