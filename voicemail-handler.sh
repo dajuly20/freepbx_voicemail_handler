@@ -44,9 +44,9 @@ CALLERID=""
 DURATION=""
 ORIGDATE=""
 if [[ -f "$LATEST_TXT" ]]; then
-    CALLERID=$(grep "^callerid=" "$LATEST_TXT" | cut -d= -f2-)
+    CALLERID=$(grep "^callerid=" "$LATEST_TXT" | cut -d= -f2- | sed 's/"/\\"/g')
     DURATION=$(grep "^duration=" "$LATEST_TXT" | cut -d= -f2-)
-    ORIGDATE=$(grep "^origdate=" "$LATEST_TXT" | cut -d= -f2-)
+    ORIGDATE=$(grep "^origdate=" "$LATEST_TXT" | cut -d= -f2- | sed 's/"/\\"/g')
 fi
 
 logger -t voicemail-handler "New voicemail: mailbox=${MAILBOX} caller=${CALLERID} duration=${DURATION}s"
@@ -79,19 +79,7 @@ TOPIC_BASE="${MQTT_TOPIC:-freepbx/voicemail}/${MAILBOX}"
 # ── Event: New voicemail (full details) ──────────────────────────
 
 if [[ "${EVENT_NEW_VM:-true}" == "true" ]]; then
-    PAYLOAD=$(cat <<EOF
-{
-    "event": "new_voicemail",
-    "context": "${CONTEXT}",
-    "mailbox": "${MAILBOX}",
-    "count": ${NEW_COUNT},
-    "callerid": "${CALLERID}",
-    "duration": "${DURATION}",
-    "date": "${ORIGDATE}",
-    "file": "${LATEST_WAV:-}"
-}
-EOF
-)
+    PAYLOAD="{\"event\":\"new_voicemail\",\"context\":\"${CONTEXT}\",\"mailbox\":\"${MAILBOX}\",\"count\":${NEW_COUNT},\"callerid\":\"${CALLERID}\",\"duration\":\"${DURATION}\",\"date\":\"${ORIGDATE}\",\"file\":\"${LATEST_WAV:-}\"}"
     mqtt_publish "${TOPIC_BASE}/data" "$PAYLOAD"
 fi
 
