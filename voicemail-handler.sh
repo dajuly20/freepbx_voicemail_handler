@@ -84,7 +84,7 @@ if [[ "${EVENT_NEW_VM:-true}" == "true" ]]; then
     "event": "new_voicemail",
     "context": "${CONTEXT}",
     "mailbox": "${MAILBOX}",
-    "new_count": ${NEW_COUNT},
+    "count": ${NEW_COUNT},
     "callerid": "${CALLERID}",
     "duration": "${DURATION}",
     "date": "${ORIGDATE}",
@@ -92,7 +92,7 @@ if [[ "${EVENT_NEW_VM:-true}" == "true" ]]; then
 }
 EOF
 )
-    mqtt_publish "$TOPIC_BASE" "$PAYLOAD"
+    mqtt_publish "${TOPIC_BASE}/data" "$PAYLOAD"
 fi
 
 # ── Event: Message count (retained) ─────────────────────────────
