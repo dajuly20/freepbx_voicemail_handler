@@ -58,7 +58,14 @@ backup_file() {
 
 # ── Check root ────────────────────────────────────────────────────
 
-if [[ $EUID -ne 0 ]]; then
+DRY_RUN=false
+if [[ "${1:-}" == "--dry-run" ]]; then
+    DRY_RUN=true
+    info "Dry-run mode — no changes will be made"
+    echo ""
+fi
+
+if [[ $EUID -ne 0 ]] && [[ "$DRY_RUN" == false ]]; then
     echo -e "${RED}✖  This script must be run as root (sudo $0)${NC}"
     exit 1
 fi
@@ -235,6 +242,32 @@ for src_file in "$HANDLER_SRC" "$CONF_SRC" "$MQTT_CONF_SRC"; do
 done
 ok "Source files present"
 
+# ── Detect existing installation ─────────────────────────────────
+
+INSTALL_TYPE="fresh"
+EXISTING_EXTERNNOTIFY=""
+
+if [[ -f "$HANDLER_DEST" ]] || [[ -f "$CONFIG_DEST" ]] || [[ -f "$MQTT_CONF_DEST" ]]; then
+    INSTALL_TYPE="update"
+fi
+
+if [[ -f "$VM_CONF" ]]; then
+    EXISTING_EXTERNNOTIFY=$(grep "^externnotify=" "$VM_CONF" 2>/dev/null | head -1 | cut -d= -f2- || true)
+    if [[ -n "$EXISTING_EXTERNNOTIFY" ]] && [[ "$EXISTING_EXTERNNOTIFY" != "$HANDLER_DEST" ]]; then
+        INSTALL_TYPE="conflict"
+    fi
+fi
+
+if [[ "$INSTALL_TYPE" == "update" ]]; then
+    info "Detected existing installation — will update"
+elif [[ "$INSTALL_TYPE" == "conflict" ]]; then
+    warn "Detected conflicting externnotify configuration"
+    warn "Current: ${EXISTING_EXTERNNOTIFY}"
+    warn "Ours:    ${HANDLER_DEST}"
+    echo ""
+    info "Installation will continue, but externnotify won't be changed automatically"
+fi
+
 # ── Phase 1: Check dependencies ──────────────────────────────────
 
 heading "⏳ [1/4] Checking dependencies..."
@@ -410,6 +443,9 @@ if [[ "$CONFIGURE_MQTT" == true ]]; then
     if [[ -f "$MQTT_CONF_DEST" ]]; then
         tag_update "Will be overwritten with new settings"
         tag_backup "Current version will be saved"
+        if [[ "$INSTALL_TYPE" == "update" ]]; then
+            warn "⚠  Contains your MQTT credentials — will be backed up!"
+        fi
     else
         tag_new "Will be created with:"
     fi
@@ -424,7 +460,7 @@ if [[ "$CONFIGURE_MQTT" == true ]]; then
     fi
     CHANGES=$((CHANGES + 1))
 elif [[ -f "$MQTT_CONF_DEST" ]]; then
-    tag_skip "Already configured"
+    tag_skip "Already configured (keeping your settings)"
 else
     tag_new "Will be created from template"
     CHANGES=$((CHANGES + 1))
@@ -507,12 +543,41 @@ echo -e "${BOLD}║   ${CHANGES} change(s) to apply                       ║${N
 echo -e "${BOLD}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 
+# Safety summary
+if [[ "$INSTALL_TYPE" == "update" ]]; then
+    echo -e "  ${BOLD}Update Summary:${NC}"
+    echo ""
+    echo -e "  ✓ All replaced files will be backed up to: ${BACKUP_DIR}/"
+    if [[ "$CONFIGURE_MQTT" == true ]] && [[ -f "$MQTT_CONF_DEST" ]]; then
+        echo -e "  ⚠ Your MQTT credentials will be preserved (migrated from old config)"
+    fi
+    if grep -q "^externnotify=" "$VM_CONF" 2>/dev/null && [[ "$(grep "^externnotify=" "$VM_CONF" | cut -d= -f2-)" == "$HANDLER_DEST" ]]; then
+        echo -e "  ✓ Your externnotify is already configured for this handler"
+    fi
+    echo ""
+elif [[ "$INSTALL_TYPE" == "conflict" ]]; then
+    echo -e "  ${YELLOW}${BOLD}⚠ Conflict Warning:${NC}"
+    echo ""
+    echo -e "  ${YELLOW}Your voicemail_custom.conf has a different externnotify:${NC}"
+    echo -e "     ${EXISTING_EXTERNNOTIFY}"
+    echo ""
+    echo -e "  ${YELLOW}This will NOT be changed automatically.${NC}"
+    echo -e "  After installation, you must manually decide which handler to use."
+    echo ""
+fi
+
 if [[ -d "$BACKUP_DIR" ]]; then
     info "Previous backup exists in ${BACKUP_DIR}/ — will be overwritten"
     echo ""
 fi
 
 # ── Confirm ──────────────────────────────────────────────────────
+
+if [[ "$DRY_RUN" == true ]]; then
+    echo -e "  ${CYAN}Dry-run mode — stopping here. No changes made.${NC}"
+    echo ""
+    exit 0
+fi
 
 read -r -p "  Apply these changes? [y/N] " REPLY
 if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then

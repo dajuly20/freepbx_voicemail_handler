@@ -64,6 +64,23 @@ cd freepbx_voicemail_handler
 sudo bash install.sh
 ```
 
+### Safety Features
+
+The installer is designed to **never break existing setups**:
+
+- ✅ **Preview mode** — Shows all changes before applying anything
+- ✅ **Automatic backups** — All replaced files saved to `/etc/asterisk/voicemail-handler-backup/`
+- ✅ **Conflict detection** — Warns if `externnotify` points elsewhere
+- ✅ **Config preservation** — Keeps existing MQTT credentials on updates
+- ✅ **Dry-run mode** — Test with `sudo bash install.sh --dry-run`
+- ✅ **One-command restore** — Undo with `sudo bash install.sh --restore`
+
+**Fresh install vs. update:**
+
+- Fresh install → Interactive prompts for all settings
+- Update → Preserves existing config, only updates code
+- Conflict → Warns but doesn't overwrite critical settings
+
 ### What the installer does
 
 The install script runs in five phases. **No changes are applied until you explicitly confirm.**
@@ -138,6 +155,24 @@ sudo bash install.sh --restore
 ```
 
 Shows a diff of what will be restored and asks for confirmation.
+
+### Verification
+
+After installation, verify everything is working:
+
+```bash
+sudo bash verify.sh
+```
+
+The verification script checks:
+
+1. **Asterisk reload** — Reloads voicemail config (if run as root)
+2. **File installation** — Verifies all files exist with correct permissions
+3. **Configuration** — Reads and validates MQTT/handler settings
+4. **MQTT connection** — Tests publish to your broker
+5. **Handler dry-run** — Simulates handler execution (if voicemails exist)
+
+Returns exit code 0 if all checks pass, non-zero otherwise.
 
 ## Configuration
 
